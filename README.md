@@ -1,5 +1,11 @@
 # PDFLayoutTextStripper as docker container command-line utility
 
+[![license](https://img.shields.io/github/license/mashape/apistatus.svg)]()
+[![](https://images.microbadger.com/badges/image/madnight/pdf-layout-text-stripper.svg)](https://microbadger.com/images/madnight/pdf-layout-text-stripper "Get your own image badge on microbadger.com")
+[![](https://travis-ci.org/madnight/pdf-layout-text-stripper.svg)](https://travis-ci.org/madnight/pdf-layout-text-stripper)
+[![Code Climate](https://lima.codeclimate.com/github/madnight/pdf-layout-text-stripper/badges/gpa.svg)](https://lima.codeclimate.com/github/madnight/pdf-layout-text-stripper)
+[![Issue Count](https://lima.codeclimate.com/github/madnight/pdf-layout-text-stripper/badges/issue_count.svg)](https://lima.codeclimate.com/github/madnight/pdf-layout-text-stripper)
+
 Converts a PDF file into a text file while keeping the layout of the original PDF. Useful to extract the content from a table or a form in a PDF file. PDFLayoutTextStripper is a subclass of PDFTextStripper class (from the [Apache PDFBox](https://pdfbox.apache.org/) library).
 
 * Use cases
