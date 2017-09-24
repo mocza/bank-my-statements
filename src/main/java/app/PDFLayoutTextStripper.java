@@ -43,11 +43,15 @@
 package app;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Vector;
+import java.util.regex.Pattern;
 
 import org.apache.pdfbox.cos.COSStream;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -60,6 +64,8 @@ public class PDFLayoutTextStripper extends PDFTextStripper {
 
     public static final boolean DEBUG = false;
     public static final int OUTPUT_SPACE_CHARACTER_WIDTH_IN_PT = 4;
+    public static final Pattern TABLE_START_REGEX = Pattern.compile("^\\s.*BALANCE BROUGHT FORWARD\\s.*$");
+    public static final Pattern TABLE_END_REGEX = Pattern.compile("^\\s.*BALANCE CARRIED FORWARD\\s.*$");
 
     private double currentPageWidth;
     private TextPosition previousTextPosition;
@@ -101,6 +107,100 @@ public class PDFLayoutTextStripper extends PDFTextStripper {
             super.getOutput().flush();
         }
     }
+
+    private List<TextLine> filterTableContents(List<TextLine> textLines) {
+        Iterator<TextLine> textIterator = textLines.iterator();
+        boolean withinTable = false;
+        String prevLine = null;
+        while ( textIterator.hasNext() ) {
+            TextLine textLine = (TextLine)textIterator.next();
+            if ( TABLE_START_REGEX.matcher(textLine.getLine()).matches() ) {
+                withinTable = true;
+                textIterator.remove();
+                continue;
+            } else if ( TABLE_END_REGEX.matcher(textLine.getLine()).matches() ) {
+                withinTable = false;
+                textIterator.remove();
+                continue;
+            }
+
+            if (!withinTable) {
+                textIterator.remove();
+            } else if (!isLineHasPayinOrPayOut(textLine.getLine())) {
+                textIterator.remove();
+            } else if (!isLineStartWithDate(textLine.getLine())) {
+                if (!isLineHasPayinOrPayOut(prevLine)) {
+                    textLine.setLine(getMergedLines(prevLine, textLine.getLine()));
+                } else {
+                    textLine.setLine(getLineWithDate(prevLine, textLine.getLine()));
+                }
+            }
+            prevLine = textLine.getLine();
+        }
+        return textLines;
+    }
+
+    private String getLineWithDate(String prevLine, String line) {
+        return getDate(prevLine) + line;
+    }
+
+    private String getMergedLines(String prevLine, String line) {
+        LocalDate date = getDate(prevLine);
+        String description = getDescription(prevLine) + " " + getDescription(line);
+        String payedIn = getPayedIn(line) == null ? "" : getPayedIn(line).toString();
+        String payedOut = getPayedOut(line) == null ? "" : getPayedOut(line).toString();
+        return date + description + payedIn + payedOut;
+    }
+
+    private String formatLine(String prevLine, String line) {
+        LocalDate date = null;
+        if (isLineStartWithDate(line)) {
+            date = getDate(line);
+        } else if (isLineOverrun(line)) {
+            date = getDate(prevLine);
+        }
+        return "";
+    }
+
+    private boolean isLineStartWithDate(String line) {
+        Pattern STARTS_WITH_DATE = Pattern.compile("^\\s*\\d");
+        return STARTS_WITH_DATE.matcher(line).matches();
+    }
+
+
+    private boolean isLineHasPayinOrPayOut(String line) {
+        return (getPayedIn(line) != null || getPayedOut(line) != null);
+    }
+
+    private boolean isLineOverrun(String line) {
+       return line.substring(28, 29).isEmpty();
+    }
+
+    private LocalDate getDate(String line) {
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd MMM yy");
+        return LocalDate.parse(line.substring(15, 23), dtf);
+    }
+
+    private String getDescription(String line) {
+        return line.substring(34, 91);
+    }
+
+    private BigDecimal getPayedOut(String line) {
+        try {
+            return new BigDecimal(line.substring(92, 99).trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private BigDecimal getPayedIn(String line) {
+        try {
+            return new BigDecimal(line.substring(111, 122).trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
 
     /*
      * In order to get rid of the warning:
@@ -210,8 +310,11 @@ public class PDFLayoutTextStripper extends PDFTextStripper {
     }
 
     private List<TextLine> getTextLineList() {
-        return this.textLineList;
+        return this.filterTableContents(textLineList);
     }
+
+
+
 
 }
 
@@ -243,6 +346,10 @@ class TextLine {
 
     public String getLine() {
         return line;
+    }
+
+    public void setLine(String line) {
+        this.line = line;
     }
 
     private int computeIndexForCharacter(final Character character) {
