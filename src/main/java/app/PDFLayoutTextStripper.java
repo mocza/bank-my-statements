@@ -46,6 +46,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -66,6 +67,11 @@ public class PDFLayoutTextStripper extends PDFTextStripper {
     public static final int OUTPUT_SPACE_CHARACTER_WIDTH_IN_PT = 4;
     public static final Pattern TABLE_START_REGEX = Pattern.compile("^\\s.*BALANCE BROUGHT FORWARD\\s.*$");
     public static final Pattern TABLE_END_REGEX = Pattern.compile("^\\s.*BALANCE CARRIED FORWARD\\s.*$");
+    public static final DateTimeFormatter DATETIMEFORMAT = DateTimeFormatter.ofPattern("dd MMM yy");
+    public static final String PADDING = "             ";
+    public static final String PADDING_AFTER_DATE = "     ";
+    public static final String CSV_DELIMITER = ";";
+
 
     private double currentPageWidth;
     private TextPosition previousTextPosition;
@@ -108,12 +114,15 @@ public class PDFLayoutTextStripper extends PDFTextStripper {
         }
     }
 
-    private List<TextLine> filterTableContents(List<TextLine> textLines) {
+    public  List<TextLine> filterTableContents(List<TextLine> textLines) {
         Iterator<TextLine> textIterator = textLines.iterator();
         boolean withinTable = false;
         String prevLine = null;
+        LocalDate currentDate = null;
+
         while ( textIterator.hasNext() ) {
             TextLine textLine = (TextLine)textIterator.next();
+            System.out.println(textLine.getLine());
             if ( TABLE_START_REGEX.matcher(textLine.getLine()).matches() ) {
                 withinTable = true;
                 textIterator.remove();
@@ -124,51 +133,68 @@ public class PDFLayoutTextStripper extends PDFTextStripper {
                 continue;
             }
 
+            String currentLine = textLine.getLine();
+
             if (!withinTable) {
                 textIterator.remove();
-            } else if (!isLineHasPayinOrPayOut(textLine.getLine())) {
+            } else if (isStandaloneLine(currentLine)) {
+                currentDate = getDate(currentLine);
+                prevLine = null;
+                textLine.setLine(getDelimitedLine(currentLine));
+//                System.out.println(textLine.getLine());
+                continue;
+            } else if (isLineStartWithDate(currentLine)) {
+                currentDate = getDate(currentLine);
+                prevLine = currentLine;
                 textIterator.remove();
-            } else if (!isLineStartWithDate(textLine.getLine())) {
-                if (!isLineHasPayinOrPayOut(prevLine)) {
-                    textLine.setLine(getMergedLines(prevLine, textLine.getLine()));
-                } else {
-                    textLine.setLine(getLineWithDate(prevLine, textLine.getLine()));
-                }
+            } else if (hasLinePayinOrPayOut(currentLine)) {
+                textLine.setLine(getMergedLine(prevLine, currentLine, currentDate));
+                prevLine = null;
+//                System.out.println(textLine.getLine());
+            } else { // no date, no payin-payout
+                prevLine = currentLine;
+                textIterator.remove();
             }
-            prevLine = textLine.getLine();
         }
         return textLines;
     }
 
-    private String getLineWithDate(String prevLine, String line) {
-        return getDate(prevLine) + line;
+    private boolean isStandaloneLine(String line) {
+        return isLineStartWithDate(line) && hasLinePayinOrPayOut(line);
     }
 
-    private String getMergedLines(String prevLine, String line) {
-        LocalDate date = getDate(prevLine);
-        String description = getDescription(prevLine) + " " + getDescription(line);
+    private String getDelimitedLine(String line) {
+        LocalDate date = getDate(line);
+        String description = getDescription(line).trim();
         String payedIn = getPayedIn(line) == null ? "" : getPayedIn(line).toString();
         String payedOut = getPayedOut(line) == null ? "" : getPayedOut(line).toString();
-        return date + description + payedIn + payedOut;
+        return date.format(DATETIMEFORMAT) + CSV_DELIMITER + description + CSV_DELIMITER + payedOut + CSV_DELIMITER + payedIn;
+
     }
 
-    private String formatLine(String prevLine, String line) {
-        LocalDate date = null;
-        if (isLineStartWithDate(line)) {
-            date = getDate(line);
-        } else if (isLineOverrun(line)) {
-            date = getDate(prevLine);
-        }
-        return "";
+    private String getLineWithDate(String prevLine, String currentLine, LocalDate currentDate) {
+        return currentDate.format(DATETIMEFORMAT) + CSV_DELIMITER + currentLine;
+    }
+
+    private String getMergedLine(String prevLine, String line, LocalDate currentDate) {
+        LocalDate date = currentDate;
+        String description = getDescription(prevLine).trim() + " " + getDescription(line).trim();
+        String payedIn = getPayedIn(line) == null ? "" : getPayedIn(line).toString();
+        String payedOut = getPayedOut(line) == null ? "" : getPayedOut(line).toString();
+        return date.format(DATETIMEFORMAT) + CSV_DELIMITER + description + CSV_DELIMITER + payedOut + CSV_DELIMITER + payedIn;
     }
 
     private boolean isLineStartWithDate(String line) {
-        Pattern STARTS_WITH_DATE = Pattern.compile("^\\s*\\d");
-        return STARTS_WITH_DATE.matcher(line).matches();
+        try {
+            getDate(line);
+        } catch (DateTimeParseException e) {
+            return false;
+        }
+        return true;
     }
 
 
-    private boolean isLineHasPayinOrPayOut(String line) {
+    private boolean hasLinePayinOrPayOut(String line) {
         return (getPayedIn(line) != null || getPayedOut(line) != null);
     }
 
@@ -177,12 +203,11 @@ public class PDFLayoutTextStripper extends PDFTextStripper {
     }
 
     private LocalDate getDate(String line) {
-        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd MMM yy");
-        return LocalDate.parse(line.substring(15, 23), dtf);
+        return LocalDate.parse(line.substring(13, 22), DATETIMEFORMAT);
     }
 
     private String getDescription(String line) {
-        return line.substring(34, 91);
+        return line.substring(27, 91);
     }
 
     private BigDecimal getPayedOut(String line) {
@@ -195,7 +220,7 @@ public class PDFLayoutTextStripper extends PDFTextStripper {
 
     private BigDecimal getPayedIn(String line) {
         try {
-            return new BigDecimal(line.substring(111, 122).trim());
+            return new BigDecimal(line.substring(110, 122).replace(",", "").trim());
         } catch (NumberFormatException e) {
             return null;
         }
@@ -310,7 +335,11 @@ public class PDFLayoutTextStripper extends PDFTextStripper {
     }
 
     private List<TextLine> getTextLineList() {
-        return this.filterTableContents(textLineList);
+        List<TextLine> filteredLines = this.filterTableContents(textLineList);
+        for(TextLine line: filteredLines) {
+            System.out.println(line);
+        }
+        return filteredLines;
     }
 
 
