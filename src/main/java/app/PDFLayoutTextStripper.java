@@ -54,6 +54,7 @@ import java.util.List;
 import java.util.Vector;
 import java.util.regex.Pattern;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.pdfbox.cos.COSStream;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
@@ -68,8 +69,7 @@ public class PDFLayoutTextStripper extends PDFTextStripper {
     public static final Pattern TABLE_START_REGEX = Pattern.compile("^\\s.*BALANCE BROUGHT FORWARD\\s.*$");
     public static final Pattern TABLE_END_REGEX = Pattern.compile("^\\s.*BALANCE CARRIED FORWARD\\s.*$");
     public static final DateTimeFormatter DATETIMEFORMAT = DateTimeFormatter.ofPattern("dd MMM yy");
-    public static final String PADDING = "             ";
-    public static final String PADDING_AFTER_DATE = "     ";
+    public static final DateTimeFormatter DATETIMEFORMAT2 = DateTimeFormatter.ofPattern("yyyy.MM.dd");
     public static final String CSV_DELIMITER = ";";
 
 
@@ -168,12 +168,12 @@ public class PDFLayoutTextStripper extends PDFTextStripper {
         String description = getDescription(line).trim();
         String payedIn = getPayedIn(line) == null ? "" : getPayedIn(line).toString();
         String payedOut = getPayedOut(line) == null ? "" : getPayedOut(line).toString();
-        return date.format(DATETIMEFORMAT) + CSV_DELIMITER + description + CSV_DELIMITER + payedOut + CSV_DELIMITER + payedIn;
+        return date.format(DATETIMEFORMAT2) + CSV_DELIMITER + description + CSV_DELIMITER + payedOut + CSV_DELIMITER + payedIn;
 
     }
 
     private String getLineWithDate(String prevLine, String currentLine, LocalDate currentDate) {
-        return currentDate.format(DATETIMEFORMAT) + CSV_DELIMITER + currentLine;
+        return currentDate.format(DATETIMEFORMAT2) + CSV_DELIMITER + currentLine;
     }
 
     private String getMergedLine(String prevLine, String line, LocalDate currentDate) {
@@ -181,7 +181,7 @@ public class PDFLayoutTextStripper extends PDFTextStripper {
         String description = getDescription(prevLine).trim() + " " + getDescription(line).trim();
         String payedIn = getPayedIn(line) == null ? "" : getPayedIn(line).toString();
         String payedOut = getPayedOut(line) == null ? "" : getPayedOut(line).toString();
-        return date.format(DATETIMEFORMAT) + CSV_DELIMITER + description + CSV_DELIMITER + payedOut + CSV_DELIMITER + payedIn;
+        return date.format(DATETIMEFORMAT2) + CSV_DELIMITER + description + CSV_DELIMITER + payedOut + CSV_DELIMITER + payedIn;
     }
 
     private boolean isLineStartWithDate(String line) {
@@ -212,7 +212,7 @@ public class PDFLayoutTextStripper extends PDFTextStripper {
 
     private BigDecimal getPayedOut(String line) {
         try {
-            return new BigDecimal(line.substring(92, 99).trim());
+            return new BigDecimal(removeThousandSeparator(line.substring(90, 99)).trim());
         } catch (NumberFormatException e) {
             return null;
         }
@@ -220,10 +220,14 @@ public class PDFLayoutTextStripper extends PDFTextStripper {
 
     private BigDecimal getPayedIn(String line) {
         try {
-            return new BigDecimal(line.substring(110, 122).replace(",", "").trim());
+            return new BigDecimal(removeThousandSeparator(line.substring(110, 122)).trim());
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    private String removeThousandSeparator(String s) {
+        return s.replace(",", "");
     }
 
 
