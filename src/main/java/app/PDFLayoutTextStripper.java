@@ -71,6 +71,7 @@ public class PDFLayoutTextStripper extends PDFTextStripper {
     public static final DateTimeFormatter DATETIMEFORMAT = DateTimeFormatter.ofPattern("dd MMM yy");
     public static final DateTimeFormatter DATETIMEFORMAT2 = DateTimeFormatter.ofPattern("yyyy.MM.dd");
     public static final String CSV_DELIMITER = ";";
+    private static final int MAX_NUMBER_OF_EMPTY_LINES = 10;
 
 
     private double currentPageWidth;
@@ -181,7 +182,7 @@ public class PDFLayoutTextStripper extends PDFTextStripper {
         String description = getDescription(prevLine).trim() + " " + getDescription(line).trim();
         String payedIn = getPayedIn(line) == null ? "" : getPayedIn(line).toString();
         String payedOut = getPayedOut(line) == null ? "" : getPayedOut(line).toString();
-        return date.format(DATETIMEFORMAT2) + CSV_DELIMITER + description + CSV_DELIMITER + payedOut + CSV_DELIMITER + payedIn;
+        return date == null ? "n/a" : date.format(DATETIMEFORMAT2) + CSV_DELIMITER + description + CSV_DELIMITER + payedOut + CSV_DELIMITER + payedIn;
     }
 
     private boolean isLineStartWithDate(String line) {
@@ -207,7 +208,7 @@ public class PDFLayoutTextStripper extends PDFTextStripper {
     }
 
     private String getDescription(String line) {
-        return line.substring(27, 91);
+        return line == null ? "" : line.substring(27, 91);
     }
 
     private BigDecimal getPayedOut(String line) {
@@ -310,7 +311,7 @@ public class PDFLayoutTextStripper extends PDFTextStripper {
             double height = textPosition.getHeight();
             int numberOfLines = (int) (Math.floor( previousTextYPosition - textYPosition) / height );
             numberOfLines = Math.max(1, numberOfLines - 1); // exclude current new line
-            return numberOfLines ;
+            return numberOfLines < MAX_NUMBER_OF_EMPTY_LINES ? numberOfLines : MAX_NUMBER_OF_EMPTY_LINES;
         } else {
             return 0;
         }
